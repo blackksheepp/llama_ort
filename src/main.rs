@@ -6,6 +6,7 @@ use ort::{
 use rand::thread_rng;
 use rand_distr::{Distribution, WeightedIndex};
 use std::error::Error;
+use std::io::{self, Write};
 use std::path::Path;
 use tokenizers::Tokenizer;
 
@@ -13,7 +14,6 @@ struct ModelConfig {
     num_layers: usize,
     num_attention_heads: usize,
     head_dim: usize,
-    hidden_size: usize,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -38,7 +38,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         ])?
         .commit_from_file(model_path)?;
 
-    println!("Model loaded successfully from {}]\n", model_path);
+    // println!("Model loaded successfully from {}]\n", model_path);
+    println!("Welcome to Llama-3.2-1B!\n");
 
     // Tokenizer loading from Hugging Face
     let tokenizer_path = "onnx-community/Llama-3.2-1B";
@@ -47,35 +48,55 @@ fn main() -> Result<(), Box<dyn Error>> {
         Err(err) => panic!("Error loading tokenizer: {}", err),
     };
 
-    println!("Tokenizer loaded successfully from {}\n", tokenizer_path);
+    // println!("Tokenizer loaded successfully from {}\n", tokenizer_path);
 
     // Initialize the model configuration by inspecting input tensors
     let model_config = initialize_model_config(&session)?;
 
-    println!(
-        "Model Config: num_layers = {}, num_attention_heads = {}, head_dim = {}, hidden_size = {}\n\n",
-        model_config.num_layers,
-        model_config.num_attention_heads,
-        model_config.head_dim,
-        model_config.hidden_size
-    );
+    // println!(
+    //     "Model Config: num_layers = {}, num_attention_heads = {}, head_dim = {}, hidden_size = {}\n\n",
+    //     model_config.num_layers,
+    //     model_config.num_attention_heads,
+    //     model_config.head_dim,
+    //     model_config.hidden_size
+    // );
 
-    let response = match generate(
-        &session,
-        &tokenizer,
-        &model_config,
-        "What is the 2nd law of motion?",
-        100,
-        0.9,
-        0.5,
-    ) {
-        Ok(response) => response,
-        Err(err) => panic!("Error generating response: {}", err),
-    };
+    loop {
+        let mut prompt = String::new();
 
-    if !response.is_empty() {
-        println!("\nResponse:\n{}", response);
+        print!("\nPrompt: ");
+        io::stdout().flush().unwrap();
+
+        std::io::stdin()
+            .read_line(&mut prompt)
+            .expect("Failed to read line");
+
+        if prompt.trim().is_empty() {
+            break;
+        }
+        let response = match generate(
+            &session,
+            &tokenizer,
+            &model_config,
+            prompt.as_str(),
+            20,
+            0.7,
+            0.5,
+        ) {
+            Ok(response) => response,
+            Err(err) => panic!("Error generating response: {}", err),
+        };
+
+        if !response.is_empty() {
+            if response.starts_with(prompt.to_string().as_str()) {
+                let response = &response[prompt.len()..];
+                println!("Llama: {}", response);
+            } else {
+                println!("Llama: {}", response);
+            }
+        }
     }
+
     Ok(())
 }
 
@@ -111,18 +132,15 @@ fn initialize_model_config(session: &Session) -> Result<ModelConfig, Box<dyn Err
         }
     }
 
-    let hidden_size = num_attention_heads * head_dim;
-
-    println!(
-        "Model Configuration: \nNum Attention Heads: {}\nHead Dim: {}\nNum Layers: {}\nHidden Size: {}",
-        num_attention_heads, head_dim, num_layers, hidden_size
-    );
+    // println!(
+    //     "Model Configuration: \nNum Attention Heads: {}\nHead Dim: {}\nNum Layers: {}\nHidden Size: {}",
+    //     num_attention_heads, head_dim, num_layers, hidden_size
+    // );
 
     Ok(ModelConfig {
         num_attention_heads,
         head_dim,
         num_layers,
-        hidden_size,
     })
 }
 
@@ -212,7 +230,7 @@ fn generate(
         past_key_values.push((vec![], vec![]));
     }
 
-    for step in 0..max_length {
+    for _ in 0..max_length {
         let batch_size = 1;
 
         let (input_ids_array, attention_mask_array, position_ids) =
@@ -221,10 +239,10 @@ fn generate(
                 Err(err) => panic!("Error preparing inputs: {}", err),
             };
 
-        print!("Step: {} ", step);
-        println!("Input shape: {:?}", input_ids_array.shape());
-        println!("Attention mask shape: {:?}", attention_mask_array.shape());
-        println!("Position IDs shape: {:?}", position_ids.shape());
+        // print!("Step: {} ", step);
+        // println!("Input shape: {:?}", input_ids_array.shape());
+        // println!("Attention mask shape: {:?}", attention_mask_array.shape());
+        // println!("Position IDs shape: {:?}", position_ids.shape());
 
         // Create the base inputs
         let mut session_inputs = ort::inputs![
